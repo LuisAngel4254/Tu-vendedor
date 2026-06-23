@@ -1,1 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu Vendedor - Catálogo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🤝 Tu Vendedor</h1>
+        <p>Selecciona tus productos</p>
+    </header>
 
+    <div id="loading">Cargando catálogo...</div>
+    <div id="catalogo" class="catalogo"></div>
+
+    <!-- Carrito Flotante -->
+    <div id="carrito-flotante" class="carrito-flotante" style="display:none;">
+        <span>🛒 <span id="carrito-count">0</span> productos</span>
+        <button onclick="verCarrito()">Ver Pedido</button>
+    </div>
+
+    <!-- Modal Carrito -->
+    <div id="modal-carrito" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h2>Tu Pedido</h2>
+            <div id="items-carrito"></div>
+            <div class="total">
+                <strong>Total: S/ <span id="total-pago">0.00</span></strong>
+            </div>
+            
+            <h3>Método de Pago</h3>
+            <select id="metodo-pago">
+                <option value="yape">Yape</option>
+                <option value="plin">Plin</option>
+                <option value="visa">Visa</option>
+            </select>
+
+            <button onclick="finalizarPedido()" class="btn-finalizar">
+                Finalizar Pedido
+            </button>
+            <button onclick="cerrarCarrito()" class="btn-cancelar">
+                Seguir Comprando
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
