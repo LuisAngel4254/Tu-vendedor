@@ -1,6 +1,6 @@
 // Configuración de Supabase
-const SUPABASE_URL = 'https://TU_PROYECTO.supabase.co';  // ← REEMPLAZA
-const SUPABASE_KEY = 'TU_ANON_KEY';  // ← REEMPLAZA
+const SUPABASE_URL = 'https://pvmhgqmarshjkmbnclqj.supabase.co';  // ← REEMPLAZA
+const SUPABASE_KEY = 'sb_publishable_KPwoyQ1eVh7PoMUJt0VHIA_cdc7sKrZ';  // ← REEMPLAZA
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let carrito = [];
