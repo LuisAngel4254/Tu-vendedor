@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
-// import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
+
+  await Supabase.initialize(
+    url: 'https://pvmhgqmarshjkmbnclqj.supabase.co',
+    anonKey: 'sb_publishable_KPwoyQ1eVh7PoMUJt0VHIA_cdc7sKrZ',
+  );
+
   runApp(const TuVendedorApp());
 }
 
@@ -17,7 +22,8 @@ class TuVendedorApp extends StatelessWidget {
       title: 'Tu Vendedor',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1B5E3B)),
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF1B5E3B)),
         useMaterial3: true,
       ),
       home: const HomeScreen(),
