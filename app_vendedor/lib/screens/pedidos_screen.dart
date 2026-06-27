@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/pedido.dart';
-import '../services/firebase_service.dart';
+import '../services/supabase_service.dart';
 import '../widgets/pedido_dialog.dart';
 import '../utils/constants.dart';
 
@@ -29,7 +29,7 @@ class _PedidosScreenState extends State<PedidosScreen> {
                 color: kColorTexto)),
       ),
       body: StreamBuilder<List<Pedido>>(
-        stream: FirebaseService.instance.pedidosActivosStream(),
+        stream: SupabaseService.instance.pedidosActivosStream(),
         builder: (context, snap) {
           // Mostrar dialog por cada pedido nuevo pendiente
           if (snap.hasData) {
@@ -73,7 +73,7 @@ class _PedidosScreenState extends State<PedidosScreen> {
             itemBuilder: (_, i) => _TarjetaPedido(
               pedido: pedidos[i],
               onCambiarEstado: (nuevoEstado) async {
-                await FirebaseService.instance
+                await SupabaseService.instance
                     .actualizarEstadoPedido(pedidos[i].id, nuevoEstado);
               },
             ),
@@ -86,15 +86,15 @@ class _PedidosScreenState extends State<PedidosScreen> {
   Future<void> _mostrarDialog(Pedido pedido) async {
     final aceptado = await mostrarPedidoDialog(context, pedido);
     if (aceptado == true) {
-      await FirebaseService.instance.actualizarEstadoPedido(
+      await SupabaseService.instance.actualizarEstadoPedido(
           pedido.id, EstadoPedido.preparando);
       // Descontar stock de cada ítem
       for (final item in pedido.items) {
-        await FirebaseService.instance
+        await SupabaseService.instance
             .descontarStock(item.productoId, item.cantidad);
       }
     } else if (aceptado == false) {
-      await FirebaseService.instance.actualizarEstadoPedido(
+      await SupabaseService.instance.actualizarEstadoPedido(
           pedido.id, EstadoPedido.cancelado);
       // Abrir WhatsApp automáticamente para explicar cancelación
       final url = Uri.parse(
