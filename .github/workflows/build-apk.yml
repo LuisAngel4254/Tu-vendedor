@@ -1,4 +1,4 @@
-APK: Build APK
+name: Build APK
 
 on:
   push:
@@ -39,3 +39,4 @@ jobs:
           name: tu-vendedor-debug
           path: app_vendedor/build/outputs/flutter-apk/app-debug.apk
           retention-days: 7
+          
