@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/producto.dart';
-import '../services/firebase_service.dart';
+import '../services/supabase_service.dart';
 import '../widgets/modulo_producto.dart';
 import '../utils/constants.dart';
 import 'producto_form_screen.dart';
@@ -24,7 +24,7 @@ class CatalogoScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(right: 16, top: 10, bottom: 10),
             child: StreamBuilder<List<Producto>>(
-              stream: FirebaseService.instance.productosStream(),
+              stream: SupabaseService.instance.productosStream(),
               builder: (_, snap) {
                 final count = snap.data?.where((p) => p.activo).length ?? 0;
                 return Container(
@@ -43,7 +43,7 @@ class CatalogoScreen extends StatelessWidget {
         ],
       ),
       body: StreamBuilder<List<Producto>>(
-        stream: FirebaseService.instance.productosStream(),
+        stream: SupabaseService.instance.productosStream(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(
