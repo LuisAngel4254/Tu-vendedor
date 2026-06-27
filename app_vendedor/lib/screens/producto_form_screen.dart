@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../core/platform_info.dart';
 import '../models/producto.dart';
-import '../services/firebase_service.dart';
+import '../services/supabase_service.dart';
 import '../utils/constants.dart';
 
 class ProductoFormScreen extends StatefulWidget {
@@ -92,7 +92,7 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
     setState(() => _guardando = true);
 
     try {
-      // TODO: subir _fotoLocal a Firebase Storage y obtener URL
+      // TODO: subir _fotoLocal a Supabase Storage y obtener URL
       final producto = Producto(
         id: widget.productoExistente?.id ?? const Uuid().v4(),
         slot: widget.slot,
@@ -105,7 +105,7 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
         actualizadoEn: DateTime.now(),
       );
 
-      await FirebaseService.instance.guardarProducto(producto);
+      await SupabaseService.instance.guardarProducto(producto);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -132,7 +132,7 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
       ),
     );
     if (confirmar != true) return;
-    await FirebaseService.instance
+    await SupabaseService.instance
         .eliminarProducto(widget.productoExistente!.id);
     if (mounted) Navigator.pop(context);
   }
