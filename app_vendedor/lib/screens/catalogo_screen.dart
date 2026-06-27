@@ -1,6 +1,5 @@
 // screens/catalogo_screen.dart
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/producto.dart';
 import '../services/supabase_service.dart';
 import '../widgets/modulo_producto.dart';
