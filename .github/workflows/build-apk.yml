@@ -37,6 +37,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tu-vendedor-debug
-          path: app_vendedor/build/outputs/flutter-apk/app-debug.apk
+          path: app_vendedor/build/app/outputs/flutter-apk/debug/app-debug.apk
           retention-days: 7
           
