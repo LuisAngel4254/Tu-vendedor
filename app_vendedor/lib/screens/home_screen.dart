@@ -1,6 +1,6 @@
 // screens/home_screen.dart
 import 'package:flutter/material.dart';
-import '../services/firebase_service.dart';
+import '../services/supabase_service.dart';
 import '../models/pedido.dart';
 import '../utils/constants.dart';
 import 'catalogo_screen.dart';
@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // Badge de pedidos pendientes
           NavigationDestination(
             icon: StreamBuilder<List<Pedido>>(
-              stream: FirebaseService.instance.pedidosPendientesStream(),
+              stream: SupabaseService.instance.pedidosPendientesStream(),
               builder: (_, snap) {
                 final count = snap.data?.length ?? 0;
                 return Badge(
@@ -89,7 +89,7 @@ class _PanelInicio extends StatelessWidget {
                 color: kColorTexto)),
       ),
       body: StreamBuilder<List<Pedido>>(
-        stream: FirebaseService.instance.pedidosActivosStream(),
+        stream: SupabaseService.instance.pedidosActivosStream(),
         builder: (context, snap) {
           final pedidos = snap.data ?? [];
           final pendientes = pedidos
