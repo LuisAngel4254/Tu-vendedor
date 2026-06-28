@@ -1,9 +1,4 @@
 // screens/perfil_negocio_screen.dart
-// Pantalla de configuración del local.
-// Adapta sus controles según la plataforma detectada:
-//   - Móvil: cámara/galería para foto, GPS para ubicación
-//   - Desktop/Web: picker de archivo para foto, campo de dirección manual
-
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,9 +8,8 @@ import 'package:image_picker/image_picker.dart';
 import '../core/permissions_handler.dart';
 import '../core/platform_info.dart';
 import '../models/negocio.dart';
+import '../services/supabase_service.dart';
 
-// ─── Paleta del app ────────────────────────────────────────────────────────
-// Verde oscuro como color primario (evoca negocio, confianza, WhatsApp).
 const _kPrimary = Color(0xFF1B5E3B);
 const _kPrimaryLight = Color(0xFFE8F5EE);
 const _kError = Color(0xFFB71C1C);
@@ -34,30 +28,26 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
   final _formKey = GlobalKey<FormState>();
   final _platform = PlatformInfo.instance;
 
-  // ── Controladores ──────────────────────────────────────────────────────────
   final _nombreCtrl = TextEditingController();
   final _whatsappCtrl = TextEditingController();
   final _direccionManualCtrl = TextEditingController();
 
-  // ── Estado ─────────────────────────────────────────────────────────────────
-  XFile? _fotoLocal;          // imagen seleccionada antes de subir
-  String? _fotoUrlExistente;  // URL ya guardada en Firebase
+  XFile? _fotoLocal;
+  String? _fotoUrlExistente;
   PermissionsResult? _permisos;
   Position? _posicionGps;
   TimeOfDay _apertura = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _cierre = const TimeOfDay(hour: 22, minute: 0);
-  final List<bool> _diasActivos = [true, true, true, true, true, false, false]; // L-D
+  final List<bool> _diasActivos = [true, true, true, true, true, false, false];
   bool _guardando = false;
+  bool _cargando = true;
   String? _errorMensaje;
-
-  static const _diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
     _solicitarPermisos();
+    _cargarDatosExistentes();
   }
 
   @override
@@ -68,12 +58,52 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
     super.dispose();
   }
 
+  // ── Cargar datos existentes de Supabase ───────────────────────────────────
+
+  Future<void> _cargarDatosExistentes() async {
+    try {
+      final negocio = await SupabaseService.instance.obtenerNegocio();
+      if (negocio != null && mounted) {
+        setState(() {
+          _nombreCtrl.text = negocio.nombre;
+          _whatsappCtrl.text = negocio.whatsappNumero;
+          _fotoUrlExistente = negocio.fotoUrl;
+
+          // Horario
+          final aperturaParts = negocio.horario.apertura.split(':');
+          final cierreParts = negocio.horario.cierre.split(':');
+          _apertura = TimeOfDay(
+            hour: int.parse(aperturaParts[0]),
+            minute: int.parse(aperturaParts[1]),
+          );
+          _cierre = TimeOfDay(
+            hour: int.parse(cierreParts[0]),
+            minute: int.parse(cierreParts[1]),
+          );
+
+          // Días activos
+          for (int i = 0; i < _diasActivos.length; i++) {
+            _diasActivos[i] = negocio.horario.diasActivos.contains(i + 1);
+          }
+
+          // Dirección manual
+          if (negocio.ubicacion.direccionTexto.isNotEmpty) {
+            _direccionManualCtrl.text = negocio.ubicacion.direccionTexto;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error cargando negocio: $e');
+    } finally {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
   // ── Permisos ───────────────────────────────────────────────────────────────
 
   Future<void> _solicitarPermisos() async {
     final result = await PermissionsHandler.instance.requestAll();
     if (mounted) setState(() => _permisos = result);
-    // Si tenemos GPS, obtenemos posición inicial
     if (result.location) await _obtenerUbicacionGps();
   }
 
@@ -84,12 +114,10 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
     XFile? picked;
 
     if (_platform.isMobile) {
-      // Móvil: elegir entre cámara y galería
       final source = await _mostrarFuenteFoto();
       if (source == null) return;
       picked = await picker.pickImage(source: source, imageQuality: 80);
     } else {
-      // Desktop / Web: solo galería (archivo)
       picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     }
 
@@ -136,9 +164,7 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
       if (mounted) setState(() => _posicionGps = pos);
-    } catch (_) {
-      // Si falla el GPS, el usuario puede ingresar dirección manual
-    }
+    } catch (_) {}
   }
 
   // ── Horario ────────────────────────────────────────────────────────────────
@@ -166,7 +192,7 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
   String _formatHora(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  // ── Validación y guardado ──────────────────────────────────────────────────
+  // ── Guardar en Supabase ────────────────────────────────────────────────────
 
   bool get _ubicacionCompleta =>
       _posicionGps != null || _direccionManualCtrl.text.trim().isNotEmpty;
@@ -181,17 +207,13 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
     setState(() { _guardando = true; _errorMensaje = null; });
 
     try {
-      // TODO: subir _fotoLocal a Firebase Storage si existe y obtener URL
-      // TODO: guardar Negocio en Firestore
-      // Por ahora construimos el modelo para verificar que todo compila:
-
       final diasIndices = <int>[];
       for (int i = 0; i < _diasActivos.length; i++) {
         if (_diasActivos[i]) diasIndices.add(i + 1);
       }
 
       final negocio = Negocio(
-        id: 'negocio_principal',
+        id: 'principal',
         nombre: _nombreCtrl.text.trim(),
         fotoUrl: _fotoUrlExistente,
         horario: HorarioAtencion(
@@ -211,7 +233,8 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
         actualizadoEn: DateTime.now(),
       );
 
-      debugPrint('Negocio listo para guardar: ${negocio.toMap()}');
+      // ✅ Guardar en Supabase
+      await SupabaseService.instance.guardarNegocio(negocio);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -220,7 +243,6 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
             backgroundColor: _kPrimary,
           ),
         );
-        // TODO: navegar a la pantalla principal con go_router
       }
     } catch (e) {
       setState(() => _errorMensaje = 'Error al guardar: $e');
@@ -233,20 +255,20 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_cargando) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: _kPrimary)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Configura tu local',
-          style: TextStyle(
-            color: _kTextMain,
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        // Chip discreto de plataforma detectada
+        title: const Text('Configura tu local',
+            style: TextStyle(color: _kTextMain, fontSize: 17,
+                fontWeight: FontWeight.w600)),
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 16, top: 10, bottom: 10),
@@ -255,10 +277,9 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
               color: _kPrimaryLight,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
-              _platform.label,
-              style: const TextStyle(fontSize: 11, color: _kPrimary, fontWeight: FontWeight.w500),
-            ),
+            child: Text(_platform.label,
+                style: const TextStyle(fontSize: 11, color: _kPrimary,
+                    fontWeight: FontWeight.w500)),
           ),
         ],
       ),
@@ -320,7 +341,6 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
                 ),
               ],
             ] else ...[
-              // Desktop / Web: campo manual siempre
               _Campo(
                 controller: _direccionManualCtrl,
                 hint: 'Av. Principal 123, Tacna',
@@ -338,10 +358,7 @@ class _PerfilNegocioScreenState extends State<PerfilNegocioScreen> {
                   style: const TextStyle(color: _kError, fontSize: 13)),
             ],
             const SizedBox(height: 32),
-            _BotonGuardar(
-              guardando: _guardando,
-              onTap: _guardar,
-            ),
+            _BotonGuardar(guardando: _guardando, onTap: _guardar),
             const SizedBox(height: 40),
           ],
         ),
@@ -362,24 +379,18 @@ class _SectionLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(children: [
-        Text(texto,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _kTextMain)),
-        if (obligatorio) ...[
-          const SizedBox(width: 3),
-          const Text('*', style: TextStyle(color: _kError, fontSize: 13)),
-        ],
+        Text(texto, style: const TextStyle(fontSize: 13,
+            fontWeight: FontWeight.w600, color: _kTextMain)),
+        if (obligatorio) const Text(' *',
+            style: TextStyle(color: _kError, fontSize: 13)),
       ]),
     );
   }
 }
 
 class _Campo extends StatelessWidget {
-  const _Campo({
-    required this.controller,
-    required this.hint,
-    this.keyboardType,
-    this.validator,
-  });
+  const _Campo({required this.controller, required this.hint,
+      this.keyboardType, this.validator});
   final TextEditingController controller;
   final String hint;
   final TextInputType? keyboardType;
@@ -397,22 +408,14 @@ class _Campo extends StatelessWidget {
         hintStyle: const TextStyle(color: _kTextSub, fontSize: 14),
         filled: true,
         fillColor: const Color(0xFFF7F9F7),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kPrimary, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kError),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kBorder)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kBorder)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kPrimary, width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _kError)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
@@ -428,7 +431,6 @@ class _FotoSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tieneImagen = fotoLocal != null || fotoUrl != null;
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -437,55 +439,43 @@ class _FotoSection extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           color: _kPrimaryLight,
           border: Border.all(color: _kPrimary.withOpacity(0.25), width: 1),
-          image: tieneImagen
-              ? DecorationImage(
-                  image: fotoLocal != null
-                      ? (kIsWeb
-                          ? NetworkImage(fotoLocal!.path)
-                          : FileImage(File(fotoLocal!.path))) as ImageProvider
-                      : NetworkImage(fotoUrl!),
-                  fit: BoxFit.cover,
-                )
-              : null,
+          image: tieneImagen ? DecorationImage(
+            image: fotoLocal != null
+                ? (kIsWeb ? NetworkImage(fotoLocal!.path)
+                    : FileImage(File(fotoLocal!.path))) as ImageProvider
+                : NetworkImage(fotoUrl!),
+            fit: BoxFit.cover,
+          ) : null,
         ),
         child: tieneImagen
-            ? Align(
-                alignment: Alignment.bottomRight,
+            ? Align(alignment: Alignment.bottomRight,
                 child: Container(
                   margin: const EdgeInsets.all(10),
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20)),
                   child: const Icon(Icons.edit, color: Colors.white, size: 16),
-                ),
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_photo_alternate_outlined,
-                      size: 36, color: _kPrimary.withOpacity(0.6)),
-                  const SizedBox(height: 8),
-                  const Text('Foto del local (opcional)',
-                      style: TextStyle(color: _kPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text('Toca para agregar',
-                      style: TextStyle(color: _kPrimary.withOpacity(0.5), fontSize: 12)),
-                ],
-              ),
+                ))
+            : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.add_photo_alternate_outlined,
+                    size: 36, color: _kPrimary.withOpacity(0.6)),
+                const SizedBox(height: 8),
+                const Text('Foto del local (opcional)',
+                    style: TextStyle(color: _kPrimary, fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text('Toca para agregar',
+                    style: TextStyle(color: _kPrimary.withOpacity(0.5),
+                        fontSize: 12)),
+              ]),
       ),
     );
   }
 }
 
 class _HorarioRow extends StatelessWidget {
-  const _HorarioRow({
-    required this.apertura,
-    required this.cierre,
-    required this.onElegirApertura,
-    required this.onElegirCierre,
-  });
+  const _HorarioRow({required this.apertura, required this.cierre,
+      required this.onElegirApertura, required this.onElegirCierre});
   final TimeOfDay apertura, cierre;
   final VoidCallback onElegirApertura, onElegirCierre;
 
@@ -495,11 +485,13 @@ class _HorarioRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      Expanded(child: _HorarioBtn(label: 'Apertura', hora: _fmt(apertura), onTap: onElegirApertura)),
+      Expanded(child: _HorarioBtn(label: 'Apertura', hora: _fmt(apertura),
+          onTap: onElegirApertura)),
       const SizedBox(width: 10),
       const Text('—', style: TextStyle(color: _kTextSub)),
       const SizedBox(width: 10),
-      Expanded(child: _HorarioBtn(label: 'Cierre', hora: _fmt(cierre), onTap: onElegirCierre)),
+      Expanded(child: _HorarioBtn(label: 'Cierre', hora: _fmt(cierre),
+          onTap: onElegirCierre)),
     ]);
   }
 }
@@ -515,17 +507,16 @@ class _HorarioBtn extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7F9F7),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _kBorder),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFFF7F9F7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kBorder)),
         child: Row(children: [
           const Icon(Icons.access_time, size: 16, color: _kPrimary),
           const SizedBox(width: 8),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: const TextStyle(fontSize: 10, color: _kTextSub)),
-            Text(hora, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _kTextMain)),
+            Text(hora, style: const TextStyle(fontSize: 15,
+                fontWeight: FontWeight.w600, color: _kTextMain)),
           ]),
         ]),
       ),
@@ -548,21 +539,15 @@ class _DiasSemana extends StatelessWidget {
         return GestureDetector(
           onTap: () => onToggle(i),
           child: Container(
-            width: 36,
-            height: 36,
+            width: 36, height: 36,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: activo ? _kPrimary : const Color(0xFFF7F9F7),
               border: Border.all(color: activo ? _kPrimary : _kBorder),
             ),
-            child: Center(
-              child: Text(_dias[i],
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: activo ? Colors.white : _kTextSub,
-                  )),
-            ),
+            child: Center(child: Text(_dias[i],
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                    color: activo ? Colors.white : _kTextSub))),
           ),
         );
       }),
@@ -580,41 +565,33 @@ class _UbicacionGps extends StatelessWidget {
     if (posicion != null) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: _kPrimaryLight,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _kPrimary.withOpacity(0.3)),
-        ),
+        decoration: BoxDecoration(color: _kPrimaryLight,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kPrimary.withOpacity(0.3))),
         child: Row(children: [
           const Icon(Icons.location_on, color: _kPrimary, size: 18),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${posicion!.latitude.toStringAsFixed(5)}, ${posicion!.longitude.toStringAsFixed(5)}',
-              style: const TextStyle(fontSize: 13, color: _kPrimary, fontWeight: FontWeight.w500),
-            ),
-          ),
-          GestureDetector(
-            onTap: onReintentar,
-            child: const Icon(Icons.refresh, color: _kPrimary, size: 18),
-          ),
+          Expanded(child: Text(
+            '${posicion!.latitude.toStringAsFixed(5)}, ${posicion!.longitude.toStringAsFixed(5)}',
+            style: const TextStyle(fontSize: 13, color: _kPrimary,
+                fontWeight: FontWeight.w500))),
+          GestureDetector(onTap: onReintentar,
+              child: const Icon(Icons.refresh, color: _kPrimary, size: 18)),
         ]),
       );
     }
-
     return GestureDetector(
       onTap: onReintentar,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7F9F7),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _kBorder),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFFF7F9F7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kBorder)),
         child: const Row(children: [
           Icon(Icons.location_searching, color: _kTextSub, size: 18),
           SizedBox(width: 8),
-          Text('Obtener ubicación GPS', style: TextStyle(fontSize: 13, color: _kTextSub)),
+          Text('Obtener ubicación GPS',
+              style: TextStyle(fontSize: 13, color: _kTextSub)),
         ]),
       ),
     );
@@ -631,19 +608,13 @@ class _MiuiAviso extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFFFCC02).withOpacity(0.5)),
       ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline, color: Color(0xFF856404), size: 16),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'En MIUI (Xiaomi): ve a Ajustes → Aplicaciones → Permisos y activa ubicación y notificaciones para esta app.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF856404), height: 1.4),
-            ),
-          ),
-        ],
-      ),
+      child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.info_outline, color: Color(0xFF856404), size: 16),
+        SizedBox(width: 8),
+        Expanded(child: Text(
+          'En MIUI (Xiaomi): ve a Ajustes → Aplicaciones → Permisos y activa ubicación y notificaciones para esta app.',
+          style: TextStyle(fontSize: 12, color: Color(0xFF856404), height: 1.4))),
+      ]),
     );
   }
 }
@@ -656,8 +627,7 @@ class _BotonGuardar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
-      height: 50,
+      width: double.infinity, height: 50,
       child: ElevatedButton(
         onPressed: guardando ? null : onTap,
         style: ElevatedButton.styleFrom(
@@ -667,15 +637,11 @@ class _BotonGuardar extends StatelessWidget {
           elevation: 0,
         ),
         child: guardando
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-            : const Text(
-                'Guardar configuración',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-              ),
+            ? const SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Text('Guardar configuración',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
+                    color: Colors.white)),
       ),
     );
   }
